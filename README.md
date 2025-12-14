@@ -189,11 +189,7 @@ Read the full technical blog post about building this project:
 - Kiro AI for accelerating development
 - AQICN for air quality data API
 - Our World in Data for COVID-19 datasets
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
+  
 ---
 
 **Made with ❤️ using Kiro and AWS Amplify**
