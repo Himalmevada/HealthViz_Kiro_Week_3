@@ -1,10 +1,7 @@
 import axios from 'axios';
 import { CovidData, AqiData } from '../types/dashboard';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||
-    (process.env.NODE_ENV === 'production'
-        ? 'https://your-api-gateway-url.amazonaws.com'
-        : 'http://localhost:3000');
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
 const AQICN_API_TOKEN = import.meta.env.VITE_AQICN_API_TOKEN || 'demo';
 
@@ -35,7 +32,7 @@ export class DashboardAPI {
 
         try {
             // In development, use the direct API
-            if (process.env.NODE_ENV === 'development') {
+            if (!import.meta.env.VITE_API_BASE_URL) {
                 const response = await axios.get(
                     'https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/vaccinations/vaccinations.json'
                 );

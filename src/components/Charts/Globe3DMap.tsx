@@ -1,6 +1,8 @@
-import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react';
-import Globe from 'react-globe.gl';
+import React, { useMemo, useRef, useEffect, useState, useCallback, Suspense, lazy } from 'react';
 import { VulnerabilityScore } from '../../types/dashboard';
+
+// Lazy load Globe to prevent SSR/build issues with WebGL
+const Globe = lazy(() => import('react-globe.gl'));
 
 interface Globe3DMapProps {
   vulnerabilityData: VulnerabilityScore[];
@@ -51,6 +53,79 @@ const cityCoordinates: Record<string, { lat: number; lng: number; country: strin
   'Rio de Janeiro': { lat: -22.9068, lng: -43.1729, country: 'Brazil' },
 };
 
+// Check if WebGL is supported
+function isWebGLSupported(): boolean {
+  try {
+    const canvas = document.createElement('canvas');
+    return !!(
+      window.WebGLRenderingContext &&
+      (canvas.getContext('webgl') || canvas.getContext('experimental-webgl'))
+    );
+  } catch {
+    return false;
+  }
+}
+
+// Helper function to get risk color
+function getRiskColor(category: VulnerabilityScore['riskCategory']): string {
+  switch (category) {
+    case 'low': return '#10b981';
+    case 'moderate': return '#f59e0b';
+    case 'high': return '#f97316';
+    case 'severe': return '#ef4444';
+    default: return '#6b7280';
+  }
+}
+
+// Generate arcs between high-risk cities
+function generateArcs(data: any[]): any[] {
+  const highRiskCities = data.filter(d => 
+    d.riskCategory === 'high' || d.riskCategory === 'severe'
+  );
+  
+  const arcs: any[] = [];
+  for (let i = 0; i < highRiskCities.length - 1; i++) {
+    for (let j = i + 1; j < highRiskCities.length; j++) {
+      const dist = Math.sqrt(
+        Math.pow(highRiskCities[i].lat - highRiskCities[j].lat, 2) +
+        Math.pow(highRiskCities[i].lng - highRiskCities[j].lng, 2)
+      );
+      if (dist < 30) {
+        arcs.push({
+          startLat: highRiskCities[i].lat,
+          startLng: highRiskCities[i].lng,
+          endLat: highRiskCities[j].lat,
+          endLng: highRiskCities[j].lng
+        });
+      }
+    }
+  }
+  return arcs.slice(0, 10);
+}
+
+// Loading fallback component
+const GlobeLoadingFallback: React.FC = () => (
+  <div className="h-[650px] flex items-center justify-center bg-gray-900 rounded-lg">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+      <p className="text-gray-300 font-medium">Loading 3D Globe...</p>
+    </div>
+  </div>
+);
+
+// WebGL not supported fallback
+const WebGLNotSupported: React.FC = () => (
+  <div className="h-[650px] flex items-center justify-center bg-gray-900 rounded-lg">
+    <div className="text-center">
+      <div className="text-gray-400 text-4xl mb-3">🌍</div>
+      <p className="text-gray-300 font-medium">3D Globe not available</p>
+      <p className="text-sm text-gray-500 mt-1">
+        WebGL is not supported in your browser. Try using the 2D map instead.
+      </p>
+    </div>
+  </div>
+);
+
 const Globe3DMap: React.FC<Globe3DMapProps> = ({
   vulnerabilityData,
   loading = false
@@ -58,7 +133,14 @@ const Globe3DMap: React.FC<Globe3DMapProps> = ({
   const globeRef = useRef<any>(null);
   const [selectedCity, setSelectedCity] = useState<any>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 650 });
+  const [webGLSupported, setWebGLSupported] = useState<boolean | null>(null);
+  const [globeError, setGlobeError] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Check WebGL support on mount
+  useEffect(() => {
+    setWebGLSupported(isWebGLSupported());
+  }, []);
 
   // Update dimensions on resize
   useEffect(() => {
@@ -85,32 +167,41 @@ const Globe3DMap: React.FC<Globe3DMapProps> = ({
         lat: cityCoordinates[v.location].lat,
         lng: cityCoordinates[v.location].lng,
         country: cityCoordinates[v.location].country,
-        size: Math.max(0.3, v.vulnerabilityIndex / 100), // Scale for visualization
+        size: Math.max(0.3, v.vulnerabilityIndex / 100),
         color: getRiskColor(v.riskCategory)
       }));
   }, [vulnerabilityData]);
 
-  // Position globe (no auto-rotation)
+  // Position globe
   useEffect(() => {
     if (globeRef.current && mapData.length > 0) {
-      // Calculate center point
-      const avgLat = mapData.reduce((sum, d) => sum + d.lat, 0) / mapData.length;
-      const avgLng = mapData.reduce((sum, d) => sum + d.lng, 0) / mapData.length;
-      
-      // Point of view - slightly zoomed out for better overview
-      globeRef.current.pointOfView({ lat: avgLat, lng: avgLng, altitude: 2.0 }, 1000);
-      
-      // Disable auto-rotation for stable viewing
-      globeRef.current.controls().autoRotate = false;
-      globeRef.current.controls().enableZoom = true;
+      try {
+        const avgLat = mapData.reduce((sum, d) => sum + d.lat, 0) / mapData.length;
+        const avgLng = mapData.reduce((sum, d) => sum + d.lng, 0) / mapData.length;
+        
+        globeRef.current.pointOfView({ lat: avgLat, lng: avgLng, altitude: 2.0 }, 1000);
+        
+        if (globeRef.current.controls()) {
+          globeRef.current.controls().autoRotate = false;
+          globeRef.current.controls().enableZoom = true;
+        }
+      } catch (err) {
+        console.warn('Globe controls error:', err);
+      }
     }
   }, [mapData]);
 
   const handlePointClick = useCallback((point: any) => {
     setSelectedCity(point);
     if (globeRef.current) {
-      globeRef.current.pointOfView({ lat: point.lat, lng: point.lng, altitude: 1.5 }, 1000);
-      globeRef.current.controls().autoRotate = false;
+      try {
+        globeRef.current.pointOfView({ lat: point.lat, lng: point.lng, altitude: 1.5 }, 1000);
+        if (globeRef.current.controls()) {
+          globeRef.current.controls().autoRotate = false;
+        }
+      } catch (err) {
+        console.warn('Globe click error:', err);
+      }
     }
   }, []);
 
@@ -125,6 +216,30 @@ const Globe3DMap: React.FC<Globe3DMapProps> = ({
           <div className="h-6 bg-gray-200 rounded w-48 mb-4"></div>
           <div className="h-[650px] bg-gray-200 rounded"></div>
         </div>
+      </div>
+    );
+  }
+
+  // Still checking WebGL support
+  if (webGLSupported === null) {
+    return (
+      <div className="chart-container p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          3D Global Vulnerability Map
+        </h3>
+        <GlobeLoadingFallback />
+      </div>
+    );
+  }
+
+  // WebGL not supported or globe error
+  if (!webGLSupported || globeError) {
+    return (
+      <div className="chart-container p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          3D Global Vulnerability Map
+        </h3>
+        <WebGLNotSupported />
       </div>
     );
   }
@@ -157,7 +272,6 @@ const Globe3DMap: React.FC<Globe3DMapProps> = ({
             Click on points to see details • Drag to rotate • Scroll to zoom • {mapData.length} locations
           </p>
         </div>
-        {/* Legend */}
         <div className="flex items-center space-x-4">
           {(['low', 'moderate', 'high', 'severe'] as const).map((risk) => (
             <div key={risk} className="flex items-center">
@@ -176,45 +290,45 @@ const Globe3DMap: React.FC<Globe3DMapProps> = ({
         className="relative rounded-lg overflow-hidden bg-gray-900"
         style={{ height: '650px' }}
       >
-        <Globe
-          ref={globeRef}
-          width={dimensions.width}
-          height={dimensions.height}
-          globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
-          bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-          backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
-          
-          // Points layer - smaller, cleaner markers
-          pointsData={mapData}
-          pointLat="lat"
-          pointLng="lng"
-          pointColor="color"
-          pointAltitude={(d: any) => 0.01 + (d.vulnerabilityIndex / 100) * 0.03}
-          pointRadius={(d: any) => 0.3 + (d.vulnerabilityIndex / 100) * 0.4}
-          pointLabel={(d: any) => `
-            <div style="background: rgba(0,0,0,0.8); padding: 8px 12px; border-radius: 8px; color: white; font-size: 12px;">
-              <strong style="font-size: 14px;">${d.location}</strong><br/>
-              <span style="color: #93c5fd;">Vaccination: ${d.vaccinationRate.toFixed(1)}%</span><br/>
-              <span style="color: #fcd34d;">AQI: ${d.aqiLevel.toFixed(0)}</span><br/>
-              <span style="color: ${d.color};">Risk: ${d.riskCategory}</span>
-            </div>
-          `}
-          onPointClick={handlePointClick}
-          
-          // Arcs between high-risk cities - subtle connections
-          arcsData={generateArcs(mapData)}
-          arcColor={() => ['rgba(255,100,100,0.3)', 'rgba(255,200,100,0.3)']}
-          arcDashLength={0.4}
-          arcDashGap={0.2}
-          arcDashAnimateTime={2000}
-          arcStroke={0.3}
-          
-          // Atmosphere
-          atmosphereColor="#3a82f7"
-          atmosphereAltitude={0.25}
-        />
+        <Suspense fallback={<GlobeLoadingFallback />}>
+          <ErrorBoundary onError={() => setGlobeError(true)}>
+            <Globe
+              ref={globeRef}
+              width={dimensions.width}
+              height={dimensions.height}
+              globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
+              bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
+              backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
+              
+              pointsData={mapData}
+              pointLat="lat"
+              pointLng="lng"
+              pointColor="color"
+              pointAltitude={(d: any) => 0.01 + (d.vulnerabilityIndex / 100) * 0.03}
+              pointRadius={(d: any) => 0.3 + (d.vulnerabilityIndex / 100) * 0.4}
+              pointLabel={(d: any) => `
+                <div style="background: rgba(0,0,0,0.8); padding: 8px 12px; border-radius: 8px; color: white; font-size: 12px;">
+                  <strong style="font-size: 14px;">${d.location}</strong><br/>
+                  <span style="color: #93c5fd;">Vaccination: ${d.vaccinationRate.toFixed(1)}%</span><br/>
+                  <span style="color: #fcd34d;">AQI: ${d.aqiLevel.toFixed(0)}</span><br/>
+                  <span style="color: ${d.color};">Risk: ${d.riskCategory}</span>
+                </div>
+              `}
+              onPointClick={handlePointClick}
+              
+              arcsData={generateArcs(mapData)}
+              arcColor={() => ['rgba(255,100,100,0.3)', 'rgba(255,200,100,0.3)']}
+              arcDashLength={0.4}
+              arcDashGap={0.2}
+              arcDashAnimateTime={2000}
+              arcStroke={0.3}
+              
+              atmosphereColor="#3a82f7"
+              atmosphereAltitude={0.25}
+            />
+          </ErrorBoundary>
+        </Suspense>
 
-        {/* Selected City Popup */}
         {selectedCity && (
           <div className="absolute top-4 right-4 bg-white rounded-lg shadow-xl p-4 max-w-xs z-10">
             <button 
@@ -268,7 +382,6 @@ const Globe3DMap: React.FC<Globe3DMapProps> = ({
           </div>
         )}
 
-        {/* Controls hint */}
         <div className="absolute bottom-4 left-4 bg-black/50 text-white text-xs px-3 py-2 rounded-lg">
           🖱️ Drag to rotate • 🔍 Scroll to zoom • 👆 Click markers for details
         </div>
@@ -284,42 +397,31 @@ const Globe3DMap: React.FC<Globe3DMapProps> = ({
   );
 };
 
-// Helper function to get risk color
-function getRiskColor(category: VulnerabilityScore['riskCategory']): string {
-  switch (category) {
-    case 'low': return '#10b981';
-    case 'moderate': return '#f59e0b';
-    case 'high': return '#f97316';
-    case 'severe': return '#ef4444';
-    default: return '#6b7280';
+// Error Boundary component for catching WebGL errors
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode; onError: () => void },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode; onError: () => void }) {
+    super(props);
+    this.state = { hasError: false };
   }
-}
 
-// Generate arcs between high-risk cities
-function generateArcs(data: any[]): any[] {
-  const highRiskCities = data.filter(d => 
-    d.riskCategory === 'high' || d.riskCategory === 'severe'
-  );
-  
-  const arcs: any[] = [];
-  for (let i = 0; i < highRiskCities.length - 1; i++) {
-    for (let j = i + 1; j < highRiskCities.length; j++) {
-      // Only create arcs between nearby cities (same region)
-      const dist = Math.sqrt(
-        Math.pow(highRiskCities[i].lat - highRiskCities[j].lat, 2) +
-        Math.pow(highRiskCities[i].lng - highRiskCities[j].lng, 2)
-      );
-      if (dist < 30) { // Only connect cities within ~30 degrees
-        arcs.push({
-          startLat: highRiskCities[i].lat,
-          startLng: highRiskCities[i].lng,
-          endLat: highRiskCities[j].lat,
-          endLng: highRiskCities[j].lng
-        });
-      }
-    }
+  static getDerivedStateFromError() {
+    return { hasError: true };
   }
-  return arcs.slice(0, 10); // Limit to 10 arcs for performance
+
+  componentDidCatch(error: Error) {
+    console.error('Globe3D Error:', error);
+    this.props.onError();
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <WebGLNotSupported />;
+    }
+    return this.props.children;
+  }
 }
 
 export default Globe3DMap;
