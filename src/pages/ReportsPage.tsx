@@ -73,9 +73,9 @@ const ReportsPage: React.FC<ReportsPageProps> = ({
     yPos += 7;
     doc.text(`Average AQI: ${metrics.averageAqi?.toFixed(1) || 'N/A'}`, 14, yPos);
     yPos += 7;
-    doc.text(`Regions Covered: ${metrics.regionsCovered || 'N/A'}`, 14, yPos);
+    doc.text(`Vaccination Rate: ${metrics.vaccinationRate?.toFixed(1) || 'N/A'}%`, 14, yPos);
     yPos += 7;
-    doc.text(`High Risk Areas: ${metrics.highRiskAreas || 'N/A'}`, 14, yPos);
+    doc.text(`Vulnerable Locations: ${metrics.vulnerableLocations || 'N/A'}`, 14, yPos);
     yPos += 15;
 
     // Vaccination Funnel Section
@@ -164,8 +164,8 @@ const ReportsPage: React.FC<ReportsPageProps> = ({
       ['Metric', 'Value'],
       ['Total Vaccinations', metrics.totalVaccinations?.toLocaleString() || 'N/A'],
       ['Average AQI', metrics.averageAqi?.toFixed(1) || 'N/A'],
-      ['Regions Covered', metrics.regionsCovered?.toString() || 'N/A'],
-      ['High Risk Areas', metrics.highRiskAreas?.toString() || 'N/A'],
+      ['Vaccination Rate', `${metrics.vaccinationRate?.toFixed(1)}%` || 'N/A'],
+      ['Vulnerable Locations', metrics.vulnerableLocations?.toString() || 'N/A'],
     ];
     const metricsSheet = XLSX.utils.aoa_to_sheet(metricsData);
     XLSX.utils.book_append_sheet(workbook, metricsSheet, 'Key Metrics');
@@ -214,8 +214,8 @@ const ReportsPage: React.FC<ReportsPageProps> = ({
     lines.push('KEY METRICS');
     lines.push(`Total Vaccinations,${metrics.totalVaccinations?.toLocaleString() || 'N/A'}`);
     lines.push(`Average AQI,${metrics.averageAqi?.toFixed(1) || 'N/A'}`);
-    lines.push(`Regions Covered,${metrics.regionsCovered || 'N/A'}`);
-    lines.push(`High Risk Areas,${metrics.highRiskAreas || 'N/A'}`);
+    lines.push(`Vaccination Rate,${metrics.vaccinationRate?.toFixed(1) || 'N/A'}%`);
+    lines.push(`Vulnerable Locations,${metrics.vulnerableLocations || 'N/A'}`);
     lines.push('');
 
     // Vaccination Funnel

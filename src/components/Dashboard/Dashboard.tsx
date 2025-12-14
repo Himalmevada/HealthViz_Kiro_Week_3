@@ -15,7 +15,6 @@ import {
   getRiskCategory,
   calculateCorrelation
 } from '../../utils/dataProcessing';
-import { getAllCitiesForCountry } from '../../utils/countryMapping';
 
 import { 
   FilterState,
