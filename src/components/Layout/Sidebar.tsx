@@ -1,5 +1,4 @@
 import React from 'react';
-import { useAuthenticator } from '@aws-amplify/ui-react';
 import {
   LayoutDashboard,
   GitCompare,
@@ -9,8 +8,6 @@ import {
   Activity,
   Map,
   TrendingUp,
-  LogOut,
-  User,
 } from 'lucide-react';
 
 export type PageType = 'dashboard' | 'comparison' | 'reports' | 'geographic' | 'analysis';
@@ -28,7 +25,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   collapsed,
   onToggleCollapse,
 }) => {
-  const { user, signOut } = useAuthenticator();
   const menuItems = [
     {
       id: 'dashboard' as PageType,
@@ -121,40 +117,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         </ul>
       </nav>
 
-      {/* Bottom Section - User Info & Logout */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-700">
-        <div className="space-y-3">
-          {/* User Info */}
-          <div
-            className={`flex items-center cursor-default ${collapsed ? 'justify-center' : 'px-3 py-2'}`}
-            title={user?.signInDetails?.loginId || 'User'}
-          >
-            <div className="h-9 w-9 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-              <User className="h-5 w-5 text-white" />
-            </div>
-            {!collapsed && (
-              <div className="ml-3 overflow-hidden">
-                <p className="text-sm font-medium text-white truncate">
-                  {user?.signInDetails?.loginId?.split('@')[0] || 'User'}
-                </p>
-                <p className="text-xs text-slate-400 truncate">Administrator</p>
-              </div>
-            )}
-          </div>
-
-          {/* Sign Out Button */}
-          <button
-            onClick={signOut}
-            className={`w-full flex items-center px-3 py-2 rounded-lg text-slate-300 hover:bg-red-600 hover:text-white transition-colors ${
-              collapsed ? 'justify-center' : ''
-            }`}
-            title={collapsed ? 'Sign Out' : undefined}
-          >
-            <LogOut className="h-5 w-5" />
-            {!collapsed && <span className="ml-3">Sign Out</span>}
-          </button>
-        </div>
-      </div>
     </aside>
   );
 };
