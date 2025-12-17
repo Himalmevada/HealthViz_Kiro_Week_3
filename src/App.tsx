@@ -1,4 +1,3 @@
-import { Activity } from 'lucide-react';
 import Dashboard from './components/Dashboard/Dashboard';
 import ErrorBoundary from './components/Common/ErrorBoundary';
 
